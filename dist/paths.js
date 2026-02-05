@@ -88,3 +88,19 @@ export function getExcludedProjects() {
     // Default: no exclusions
     return [];
 }
+/**
+ * Get Pi sessions directory if it exists
+ * Pi stores sessions in ~/.pi/agent/sessions/
+ */
+export function getPiSessionsDir() {
+    const piDir = path.join(os.homedir(), '.pi', 'agent', 'sessions');
+    return fs.existsSync(piDir) ? piDir : null;
+}
+/**
+ * Normalize a project name from Pi format
+ * Pi uses --path-to-project-- format, Claude Code uses -path-to-project
+ */
+export function normalizeProjectName(projectName) {
+    // Strip leading/trailing double-dashes from Pi format
+    return projectName.replace(/^--/, '').replace(/--$/, '');
+}

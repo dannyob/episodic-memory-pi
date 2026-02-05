@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { SUMMARIZER_CONTEXT_MARKER } from './constants.js';
-import { getExcludedProjects } from './paths.js';
+import { getExcludedProjects, getPiSessionsDir, normalizeProjectName } from './paths.js';
 const EXCLUSION_MARKERS = [
     '<INSTRUCTIONS-TO-EPISODIC-MEMORY>DO NOT INDEX THIS CHAT</INSTRUCTIONS-TO-EPISODIC-MEMORY>',
     'Only use NO_INSIGHTS_FOUND',
@@ -38,34 +38,35 @@ function copyIfNewer(src, dest) {
     return true;
 }
 function extractSessionIdFromPath(filePath) {
-    // Extract session ID from filename: /path/to/abc-123-def.jsonl -> abc-123-def
+    // Extract session ID from filename
+    // Claude Code format: /path/to/abc-123-def.jsonl -> abc-123-def
+    // Pi format: /path/to/2026-02-05T04-32-01-792Z_abc-123-def.jsonl -> abc-123-def
     const basename = path.basename(filePath, '.jsonl');
-    // Session IDs are UUIDs, validate format
+    // Try Claude Code format first (just UUID)
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(basename)) {
         return basename;
     }
+    // Try Pi format (timestamp_UUID)
+    const piMatch = basename.match(/_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+    if (piMatch) {
+        return piMatch[1];
+    }
     return null;
 }
-export async function syncConversations(sourceDir, destDir, options = {}) {
-    const result = {
-        copied: 0,
-        skipped: 0,
-        indexed: 0,
-        summarized: 0,
-        errors: []
-    };
-    // Ensure source directory exists
+/**
+ * Sync conversations from a single source directory
+ * Internal helper used by syncConversations
+ */
+async function syncFromSource(sourceDir, destDir, options, result, filesToIndex, filesToSummarize, isPiSource = false) {
     if (!fs.existsSync(sourceDir)) {
-        return result;
+        return;
     }
-    // Collect files to index and summarize
-    const filesToIndex = [];
-    const filesToSummarize = [];
-    // Walk source directory
     const projects = fs.readdirSync(sourceDir);
     const excludedProjects = getExcludedProjects();
     for (const project of projects) {
-        if (excludedProjects.includes(project)) {
+        // Normalize project name (strip Pi's --prefix-- format)
+        const normalizedProject = isPiSource ? normalizeProjectName(project) : project;
+        if (excludedProjects.includes(project) || excludedProjects.includes(normalizedProject)) {
             console.log("\nSkipping excluded project: " + project);
             continue;
         }
@@ -76,7 +77,8 @@ export async function syncConversations(sourceDir, destDir, options = {}) {
         const files = fs.readdirSync(projectPath).filter(f => f.endsWith('.jsonl'));
         for (const file of files) {
             const srcFile = path.join(projectPath, file);
-            const destFile = path.join(destDir, project, file);
+            // Use normalized project name for destination to avoid duplicates
+            const destFile = path.join(destDir, normalizedProject, file);
             try {
                 const wasCopied = copyIfNewer(srcFile, destFile);
                 if (wasCopied) {
@@ -104,6 +106,26 @@ export async function syncConversations(sourceDir, destDir, options = {}) {
                 });
             }
         }
+    }
+}
+export async function syncConversations(sourceDir, destDir, options = {}) {
+    const result = {
+        copied: 0,
+        skipped: 0,
+        indexed: 0,
+        summarized: 0,
+        errors: []
+    };
+    // Collect files to index and summarize
+    const filesToIndex = [];
+    const filesToSummarize = [];
+    // Sync from primary source (Claude Code)
+    await syncFromSource(sourceDir, destDir, options, result, filesToIndex, filesToSummarize, false);
+    // Also sync from Pi sessions if available
+    const piSessionsDir = getPiSessionsDir();
+    if (piSessionsDir) {
+        console.log(`\nSyncing Pi sessions from ${piSessionsDir}...`);
+        await syncFromSource(piSessionsDir, destDir, options, result, filesToIndex, filesToSummarize, true);
     }
     // Index copied files (unless skipIndex is set)
     if (!options.skipIndex && filesToIndex.length > 0) {

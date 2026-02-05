@@ -49,7 +49,13 @@ export async function parseConversation(filePath, projectName, archivePath) {
         try {
             const parsed = JSON.parse(line);
             // Skip non-message types
-            if (parsed.type !== 'user' && parsed.type !== 'assistant') {
+            // Support both Claude Code format (type: 'user'/'assistant') 
+            // and Pi format (type: 'message' with message.role)
+            const messageRole = parsed.message?.role;
+            const effectiveType = (parsed.type === 'message' && messageRole)
+                ? messageRole
+                : parsed.type;
+            if (effectiveType !== 'user' && effectiveType !== 'assistant') {
                 continue;
             }
             if (!parsed.message) {
@@ -68,15 +74,18 @@ export async function parseConversation(filePath, projectName, archivePath) {
                     .map(block => block.text);
                 text = textBlocks.join('\n');
                 // Extract tool use blocks
-                if (parsed.message.role === 'assistant') {
+                // Support both Claude Code format (tool_use) and Pi format (toolCall)
+                if (effectiveType === 'assistant') {
                     for (const block of parsed.message.content) {
-                        if (block.type === 'tool_use') {
-                            const toolCallId = crypto.randomUUID();
+                        // Claude Code format: type: 'tool_use', input: {...}
+                        // Pi format: type: 'toolCall', arguments: {...}
+                        if (block.type === 'tool_use' || block.type === 'toolCall') {
+                            const toolCallId = block.id || crypto.randomUUID();
                             toolCalls.push({
                                 id: toolCallId,
                                 exchangeId: '', // Will be set when we know the exchange ID
                                 toolName: block.name || 'unknown',
-                                toolInput: block.input,
+                                toolInput: block.input || block.arguments, // Pi uses 'arguments'
                                 isError: false,
                                 timestamp: parsed.timestamp || new Date().toISOString()
                             });
@@ -98,7 +107,7 @@ export async function parseConversation(filePath, projectName, archivePath) {
             if (!text.trim() && toolCalls.length === 0) {
                 continue;
             }
-            if (parsed.message.role === 'user') {
+            if (effectiveType === 'user') {
                 // Finalize previous exchange before starting new one
                 finalizeExchange();
                 // Start new exchange
@@ -120,7 +129,7 @@ export async function parseConversation(filePath, projectName, archivePath) {
                     toolCalls: []
                 };
             }
-            else if (parsed.message.role === 'assistant' && currentExchange) {
+            else if (effectiveType === 'assistant' && currentExchange) {
                 // Accumulate assistant messages
                 if (text.trim()) {
                     currentExchange.assistantMessages.push(text);

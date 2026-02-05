@@ -29,3 +29,13 @@ export declare function getExcludeConfigPath(): string;
  * Configurable via env var or config file
  */
 export declare function getExcludedProjects(): string[];
+/**
+ * Get Pi sessions directory if it exists
+ * Pi stores sessions in ~/.pi/agent/sessions/
+ */
+export declare function getPiSessionsDir(): string | null;
+/**
+ * Normalize a project name from Pi format
+ * Pi uses --path-to-project-- format, Claude Code uses -path-to-project
+ */
+export declare function normalizeProjectName(projectName: string): string;
