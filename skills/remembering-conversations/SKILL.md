@@ -7,32 +7,30 @@ description: Use when user asks 'how should I...' or 'what's the best approach..
 
 **Core principle:** Search before reinventing. Searching costs nothing; reinventing or repeating mistakes costs everything.
 
-## Mandatory: Use the Search Agent
+## How to Search
 
-**YOU MUST dispatch the search-conversations agent for any historical search.**
-
-Announce: "Dispatching search agent to find [topic]."
-
-Then use the Task tool with `subagent_type: "search-conversations"`:
+Use the `episodic_memory_search` tool directly:
 
 ```
-Task tool:
-  description: "Search past conversations for [topic]"
-  prompt: "Search for [specific query or topic]. Focus on [what you're looking for - e.g., decisions, patterns, gotchas, code examples]."
-  subagent_type: "search-conversations"
+episodic_memory_search
+  query: "your search query"
+  mode: "both"
 ```
 
-The agent will:
-1. Search with the `search` tool
-2. Read top 2-5 results with the `show` tool
-3. Synthesize findings (200-1000 words)
-4. Return actionable insights + sources
+Then read top 2-5 results with `episodic_memory_read`:
 
-**Saves 50-100x context vs. loading raw conversations.**
+```
+episodic_memory_read
+  path: "/path/to/conversation.jsonl"
+  startLine: 100
+  endLine: 200
+```
+
+Synthesize findings into actionable insights (200-1000 words) before applying them.
 
 ## When to Use
 
-You often get value out of consulting your episodic memory once you understand what you're being asked. Search memory in these situations:
+Search memory in these situations:
 
 **After understanding the task:**
 - User asks "how should I..." or "what's the best approach..."
@@ -54,12 +52,27 @@ You often get value out of consulting your episodic memory once you understand w
 - For info in current conversation
 - Before understanding what you're being asked to do
 
-## Direct Tool Access (Discouraged)
+## Search Workflow
 
-You CAN use MCP tools directly, but DON'T:
-- `mcp__plugin_episodic-memory_episodic-memory__search`
-- `mcp__plugin_episodic-memory_episodic-memory__show`
+1. **Search** with `episodic_memory_search` — use descriptive queries, try multiple if needed
+2. **Read** top 2-5 results with `episodic_memory_read` — use startLine/endLine for large conversations
+3. **Synthesize** — extract decisions, patterns, gotchas, and rationale (200-1000 words)
+4. **Apply** — use insights to inform the current task
 
-Using these directly wastes your context window. Always dispatch the agent instead.
+## Search Tips
 
-See MCP-TOOLS.md for complete API reference if needed for advanced usage.
+- **Semantic search** (`mode: "both"`, default): Best for conceptual queries like "authentication error handling"
+- **Text search** (`mode: "text"`): Best for exact strings like error messages, SHAs, function names
+- **Multi-concept AND search**: Pass an array of 2-5 query strings to find conversations matching ALL concepts
+- **Date filtering**: Use `after` and `before` (YYYY-MM-DD) to narrow by time range
+- **Pagination**: Use `startLine`/`endLine` in `episodic_memory_read` for large conversations
+
+## What to Look For
+
+When reading past conversations, focus on:
+- What was the problem or question?
+- What solution was chosen and why?
+- What alternatives were considered and rejected?
+- Any gotchas, edge cases, or lessons learned?
+- Relevant code patterns, APIs, or approaches used
+- Architectural decisions and rationale

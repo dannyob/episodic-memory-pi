@@ -18,12 +18,17 @@
     "test:watch": "vitest"
   },
   "keywords": [
+    "pi-package",
     "claude-code",
     "conversations",
     "search",
     "semantic-search",
     "embeddings"
   ],
+  "pi": {
+    "extensions": ["./extensions"],
+    "skills": ["./skills"]
+  },
   "author": {
     "name": "Jesse Vincent",
     "email": "jesse@fsck.com"

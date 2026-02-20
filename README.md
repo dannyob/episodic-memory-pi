@@ -1,6 +1,6 @@
 # Episodic Memory
 
-Semantic search for Claude Code conversations. Remember past discussions, decisions, and patterns.
+Semantic search for Claude Code and Pi conversations. Remember past discussions, decisions, and patterns.
 
 ## Testimonial
 
@@ -43,7 +43,29 @@ _Conversation ID: 216ad284-c782-45a4-b2ce-36775cdb5a6c_
 
 ## Installation
 
-### As a Claude Code plugin (Recommended)
+### As a Pi package
+
+Install as a Pi package for native tool integration, automatic session syncing, and a skill that guides the model to search your history when relevant.
+
+```bash
+pi install /path/to/episodic-memory
+```
+
+Or, if published:
+
+```bash
+pi install npm:episodic-memory
+```
+
+This gives you:
+- **`episodic_memory_search` tool** — Semantic and text search across all your past conversations, callable by the LLM
+- **`episodic_memory_read` tool** — Read full conversations from the archive with line-range pagination
+- **Automatic background sync** — Conversations from both Claude Code and Pi are synced on session start
+- **`remembering-conversations` skill** — Guides the model to search your history at the right moments
+
+Pi sessions (`~/.pi/agent/sessions/`) and Claude Code sessions (`~/.claude/projects/`) are both indexed into the same searchable archive.
+
+### As a Claude Code plugin
 
 The plugin provides MCP server integration, automatic session-end indexing, and seamless access to your conversation history.
 
@@ -68,7 +90,7 @@ npm install episodic-memory
 ### Quick Start
 
 ```bash
-# Sync conversations from Claude Code and index them
+# Sync conversations from Claude Code and Pi, then index them
 episodic-memory sync
 
 # Search your conversation history
@@ -113,6 +135,16 @@ The original commands are still available for backward compatibility:
 ```bash
 episodic-memory-index
 episodic-memory-search "query"
+```
+
+### In Pi
+
+The extension registers `episodic_memory_search` and `episodic_memory_read` as custom tools that the LLM can call directly. The `remembering-conversations` skill teaches the model when and how to use them.
+
+Conversations from both Pi and Claude Code sessions are synced automatically on session start. You can also trigger a manual sync:
+
+```bash
+episodic-memory sync
 ```
 
 ### In Claude Code
@@ -161,13 +193,17 @@ These settings only affect episodic-memory's summarization calls, not your inter
 
 ### `episodic-memory sync`
 
-**Recommended for session-end hooks.** Copies new conversations from `~/.claude/projects` to archive and indexes them.
+Copies new conversations from both `~/.claude/projects` and `~/.pi/agent/sessions/` to the archive and indexes them.
 
 Features:
+- Syncs from both Claude Code and Pi session directories
 - Only copies new or modified files (fast on subsequent runs)
+- Normalizes Pi project names (`--path-to-project--` → `path-to-project`)
 - Generates embeddings for semantic search
 - Atomic operations - safe to run concurrently
 - Idempotent - safe to call repeatedly
+
+**Automatic in Pi:** The Pi extension runs `sync --background` on every session start.
 
 **Usage in Claude Code:**
 Add to `.claude/hooks/session-end`:
@@ -219,13 +255,14 @@ open output.html
 
 - **Core package** - TypeScript library for indexing and searching conversations
 - **CLI tools** - Unified command-line interface for manual use
+- **Pi extension** - Native Pi integration (custom tools, session sync, skill)
 - **MCP Server** - Model Context Protocol server exposing search and conversation tools
 - **Claude Code plugin** - Integration with Claude Code (auto-indexing, MCP tools, hooks)
 
 ## How It Works
 
-1. **Sync** - Copies conversation files from `~/.claude/projects` to archive
-2. **Parse** - Extracts user-agent exchanges from JSONL format
+1. **Sync** - Copies conversation files from `~/.claude/projects` and `~/.pi/agent/sessions/` to a unified archive
+2. **Parse** - Extracts user-agent exchanges from JSONL format (supports both Claude Code and Pi session formats)
 3. **Embed** - Generates vector embeddings using Transformers.js (local, offline)
 4. **Index** - Stores in SQLite with sqlite-vec for fast similarity search
 5. **Search** - Semantic search using vector similarity or exact text matching
@@ -250,32 +287,15 @@ Conversations containing this marker anywhere in their content will be archived 
 
 The marker can appear in any message (user or assistant) and excludes the entire conversation from the search index.
 
-## MCP Server
+## Tools
 
-When installed as a Claude Code plugin, episodic-memory provides an MCP (Model Context Protocol) server that exposes tools for searching and viewing conversations.
+### Pi Tools
 
-### Available MCP Tools
+When installed as a Pi package, episodic-memory registers native Pi tools:
 
 #### `episodic_memory_search`
 
 Search indexed conversations using semantic similarity or exact text matching.
-
-**Single-concept search**: Pass a string query
-```json
-{
-  "query": "React Router authentication",
-  "mode": "vector",
-  "limit": 10
-}
-```
-
-**Multi-concept AND search**: Pass an array of concepts
-```json
-{
-  "query": ["React Router", "authentication", "JWT"],
-  "limit": 10
-}
-```
 
 **Parameters:**
 - `query` (string | string[]): Single string for regular search, or array of 2-5 strings for multi-concept AND search
@@ -283,24 +303,21 @@ Search indexed conversations using semantic similarity or exact text matching.
 - `limit` (number): Max results, 1-50 (default: 10)
 - `after` (string, optional): Only show conversations after YYYY-MM-DD
 - `before` (string, optional): Only show conversations before YYYY-MM-DD
-- `response_format` ('markdown' | 'json'): Output format (default: 'markdown')
 
-#### `episodic_memory_show`
+#### `episodic_memory_read`
 
-Display a full conversation in readable markdown format.
-
-```json
-{
-  "path": "/path/to/conversation.jsonl"
-}
-```
+Read a full conversation from the archive as markdown, with optional line-range pagination.
 
 **Parameters:**
 - `path` (string): Absolute path to the JSONL conversation file
+- `startLine` (number, optional): Starting line number (1-indexed, inclusive)
+- `endLine` (number, optional): Ending line number (1-indexed, inclusive)
 
-### Using the MCP Server Directly
+Both tools automatically truncate output to avoid context overflow.
 
-The MCP server can also be used outside of Claude Code with any MCP-compatible client:
+### MCP Server (Claude Code)
+
+When installed as a Claude Code plugin, episodic-memory provides an MCP server with equivalent `search` and `read` tools. The MCP server can also be used standalone with any MCP-compatible client:
 
 ```bash
 # Run the MCP server (stdio transport)
