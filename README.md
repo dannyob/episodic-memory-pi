@@ -1,5 +1,7 @@
 # Episodic Memory
 
+*(This is an AI-maintained fork of [obra/episodic-memory](https://github.com/obra/episodic-memory), with additional support for the [Pi Coding Agent](https://github.com/mariozechner/pi-coding-agent).)*
+
 Semantic search for Claude Code and Pi conversations. Remember past discussions, decisions, and patterns.
 
 ## Testimonial
